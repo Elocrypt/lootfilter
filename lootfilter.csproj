@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="configlib">
+      <HintPath>..\configlib.dll</HintPath>
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>..\ImGui.NET.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\..\..\..\..\..\Downloads\XSkillsPatch\Dependencies\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="VintagestoryAPI">
+      <HintPath>..\..\..\..\..\..\Downloads\XSkillsPatch\Dependencies\VintagestoryAPI.dll</HintPath>
+    </Reference>
+    <Reference Include="VSImGui">
+      <HintPath>..\VSImGui.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
