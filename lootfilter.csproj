@@ -16,11 +16,8 @@
     <Reference Include="0Harmony">
       <HintPath>bin\Release\net7.0\0Harmony.dll</HintPath>
     </Reference>
-    <Reference Include="configlib">
-      <HintPath>..\configlib.dll</HintPath>
-    </Reference>
-    <Reference Include="ImGui.NET">
-      <HintPath>..\ImGui.NET.dll</HintPath>
+    <Reference Include="cairo-sharp">
+      <HintPath>..\..\..\..\..\AppData\Roaming\VintageStory\VS120-rc6\Vintagestory\Lib\cairo-sharp.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>bin\Release\net7.0\Newtonsoft.Json.dll</HintPath>
@@ -34,8 +31,8 @@
     <Reference Include="VSEssentials">
       <HintPath>bin\Release\net7.0\VSEssentials.dll</HintPath>
     </Reference>
-    <Reference Include="VSImGui">
-      <HintPath>..\VSImGui.dll</HintPath>
+    <Reference Include="VSSurvivalMod">
+      <HintPath>..\..\..\..\..\AppData\Roaming\VintageStory\VS120-rc6\Vintagestory\Mods\VSSurvivalMod.dll</HintPath>
     </Reference>
   </ItemGroup>
 

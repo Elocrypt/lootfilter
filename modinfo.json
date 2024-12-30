@@ -1,10 +1,10 @@
 {
   "type": "code",
-  "side": "Universal",
+  "side": "Client",
   "modid": "lootfilter",
   "name": "Loot Filter",
   "authors": [ "Elocrypt" ],
-  "description": "Filters loot.",
+  "description": "A client-side loot filter mod to customize item collection.",
   "version": "1.0.0",
   "dependencies": {
     "game": "1.20.0-pre"
