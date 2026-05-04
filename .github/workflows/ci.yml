@@ -34,12 +34,13 @@ jobs:
           curl -fL -o vs.tar.gz "https://cdn.vintagestory.at/gamefiles/stable/vs_server_linux-x64_1.22.0.tar.gz"
           tar -xzf vs.tar.gz -C "$HOME/vs"
           echo "VINTAGE_STORY=$HOME/vs" >> "$GITHUB_ENV"
+          echo "VintagestoryDir=$HOME/vs" >> "$GITHUB_ENV"
           
       - name: Restore
         run: dotnet restore LootFilter.sln
 
       - name: Build
-        run: dotnet build LootFilter.sln --configuration Release --no-restore /p:DeployMod=false
+        run: dotnet build LootFilter.sln --configuration Release --no-restore /p:DeployMod=false /p:VintagestoryDir=${{ env.VintagestoryDir }}
 
       - name: Test
         run: dotnet test LootFilter.sln --configuration Release --no-build --verbosity normal
