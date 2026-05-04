@@ -12,7 +12,7 @@ namespace LootFilter
     /// Main client-side GUI for the loot filter.
     /// Reads from <see cref="LootFilterMod.ClientMirror"/> (server-synced)
     /// and pushes changes via <see cref="LootFilterMod.SendConfigToServer"/>.
-    /// Three tabs: Items, Keywords, Settings.
+    /// Four tabs: Items (0), Keywords (1), Attributes (2), Settings (3).
     /// </summary>
     internal class FilterGuiDialog : GuiDialog
     {
@@ -37,6 +37,26 @@ namespace LootFilter
         private string currentKeywordInput = "";
         private int currentPageKeywords;
 
+        // ── Attributes tab ───────────────────────────────────────────────
+        // Field, operator, and threshold inputs for adding a new rule.
+        private string attrFieldInput    = "";
+        private int    attrOpIndex       = 1;    // index into OpLabels/OpValues; 1 = ≤
+        private string attrThreshInput   = "";
+        private string attrLabelInput    = "";
+        private int    currentPageAttrs;
+
+        private static readonly string[] OpLabels = { "<", "≤", "=", "≥", ">" };
+        private static readonly string[] OpDropdownValues = { "lt", "lte", "eq", "gte", "gt" };
+        private static readonly string[] OpDropdownNames  = { "Less than", "At most (≤)", "Equal (=)", "At least (≥)", "Greater than" };
+        private static readonly AttributeOperator[] OpValues =
+        {
+            AttributeOperator.LessThan,
+            AttributeOperator.LessThanOrEqual,
+            AttributeOperator.Equal,
+            AttributeOperator.GreaterThanOrEqual,
+            AttributeOperator.GreaterThan
+        };
+
         // ── Recompose guard ──────────────────────────────────────────────
         // Prevents SetValue() on the search field from re-triggering the
         // search handler → refresh → recompose → SetValue → infinite loop.
@@ -44,6 +64,9 @@ namespace LootFilter
 
         // ── Input suppression ────────────────────────────────────────────
         private bool suppressNextInput;
+
+        // ── Import dialog ────────────────────────────────────────────────
+        private FilterImportDialog? importDialog;
 
         public override string ToggleKeyCombinationCode => "lootfilter.toggle";
         public override bool PrefersUngrabbedMouse => true;
@@ -68,12 +91,17 @@ namespace LootFilter
 
             workingCopy = CloneConfig(mod.ClientMirror);
 
-            currentPageItems = 0;
+            currentPageItems    = 0;
             currentPageKeywords = 0;
-            searchQuery = "";
-            currentSearchText = "";
+            currentPageAttrs    = 0;
+            searchQuery         = "";
+            currentSearchText   = "";
             currentKeywordInput = "";
-            suppressNextInput = true;
+            attrFieldInput      = "";
+            attrOpIndex         = 1;
+            attrThreshInput     = "";
+            attrLabelInput      = "";
+            suppressNextInput   = true;
 
             // Build the initial item list synchronously so we don't
             // immediately recompose (and steal focus) when the background
@@ -124,9 +152,10 @@ namespace LootFilter
 
             var tabs = new GuiTab[]
             {
-                new GuiTab { Name = "Items",    DataInt = 0 },
-                new GuiTab { Name = "Keywords", DataInt = 1 },
-                new GuiTab { Name = "Settings", DataInt = 2 }
+                new GuiTab { Name = "Items",      DataInt = 0 },
+                new GuiTab { Name = "Keywords",   DataInt = 1 },
+                new GuiTab { Name = "Attributes", DataInt = 2 },
+                new GuiTab { Name = "Settings",   DataInt = 3 }
             };
 
             var tabBounds = ElementBounds.Fixed(-110, 35, 110, 400);
@@ -142,27 +171,30 @@ namespace LootFilter
 
             switch (activeTabIndex)
             {
-                case 0: ComposeItemsTab(); break;
-                case 1: ComposeKeywordsTab(); break;
-                case 2: ComposeSettingsTab(); break;
+                case 0: ComposeItemsTab();      break;
+                case 1: ComposeKeywordsTab();   break;
+                case 2: ComposeAttributesTab(); break;
+                case 3: ComposeSettingsTab();   break;
             }
 
             SingleComposer.Compose();
             isRecomposing = false;
         }
 
-        // ── Items tab ────────────────────────────────────────────────────
+        // ── Items tab (tab 0) ─────────────────────────────────────────────
 
         private void ComposeItemsTab()
         {
-            var searchBounds   = ElementBounds.Fixed(10, 40, 290, 30);
-            var headerName     = ElementBounds.Fixed(48, 80, 200, 20);
-            var headerToggle   = ElementBounds.Fixed(310, 80, 100, 20);
-            var listInset      = ElementBounds.Fixed(10, 105, 395, 410).WithFixedPadding(1);
+            var searchBounds = ElementBounds.Fixed(10, 40, 290, 30);
+            var headerName   = ElementBounds.Fixed(48, 80, 200, 20);
+            var headerToggle = ElementBounds.Fixed(310, 80, 100, 20);
+            var listInset    = ElementBounds.Fixed(10, 105, 395, 410).WithFixedPadding(1);
 
             SingleComposer
                 .AddTextInput(searchBounds, OnSearchTextChangedInternal,
                               CairoFont.WhiteSmallText(), "searchField")
+                .AddHoverText("Type to search by name. Wrap in /slashes/ for regex (e.g. /^Iron.*sword$/)",
+                    CairoFont.WhiteSmallText(), 280, searchBounds)
                 .AddStaticText("Item Name", CairoFont.WhiteSmallText(), headerName)
                 .AddStaticText("Filter", CairoFont.WhiteSmallText(), headerToggle)
                 .AddInset(listInset, 3)
@@ -181,7 +213,7 @@ namespace LootFilter
                 // Item icon — rendered during the GL phase by our custom element.
                 try
                 {
-                    var iconStack = new ItemStack(item, 1);
+                    var iconStack  = new ItemStack(item, 1);
                     var iconBounds = ElementBounds.Fixed(5, y, 30, 30);
                     SingleComposer.AddInteractiveElement(
                         new GuiElementItemIcon(capi, iconStack, iconBounds),
@@ -218,14 +250,16 @@ namespace LootFilter
 
             SingleComposer
                 .AddSmallButton("◄", () => { PageItems(-1); return true; }, prevBounds)
-                .AddStaticText(pageLabel, CairoFont.WhiteSmallText().WithOrientation(EnumTextOrientation.Center), pageBounds)
+                .AddStaticText(pageLabel,
+                    CairoFont.WhiteSmallText().WithOrientation(EnumTextOrientation.Center),
+                    pageBounds)
                 .AddSmallButton("►", () => { PageItems(1); return true; }, nextBounds);
 
             // Restore search text and placeholder.
             var searchField = SingleComposer.GetTextInput("searchField");
             if (searchField != null)
             {
-                searchField.SetPlaceHolderText("Search... (Regex: /.../ or plain text)");
+                searchField.SetPlaceHolderText("Search… (Regex: /.../ or plain text)");
                 if (!string.IsNullOrEmpty(currentSearchText))
                     searchField.SetValue(currentSearchText);
             }
@@ -236,7 +270,7 @@ namespace LootFilter
             var page = GetItemsPage();
             for (int i = 0; i < page.Count; i++)
             {
-                string code = page[i].Code.ToString();
+                string code      = page[i].Code.ToString();
                 string switchKey = "itemSwitch-" + i;
                 var sw = SingleComposer?.GetSwitch(switchKey);
                 if (sw != null)
@@ -260,7 +294,7 @@ namespace LootFilter
 
         private List<CollectibleObject> GetItemsPage()
         {
-            int skip = currentPageItems * ItemsPerPage;
+            int skip  = currentPageItems * ItemsPerPage;
             int count = Math.Min(ItemsPerPage, Math.Max(0, cachedFilteredItems.Count - skip));
             if (count <= 0) return new List<CollectibleObject>();
             return cachedFilteredItems.GetRange(skip, count);
@@ -276,7 +310,7 @@ namespace LootFilter
             ApplyPostComposeStates();
         }
 
-        // ── Keywords tab ─────────────────────────────────────────────────
+        // ── Keywords tab (tab 1) ──────────────────────────────────────────
 
         private void ComposeKeywordsTab()
         {
@@ -291,11 +325,11 @@ namespace LootFilter
                               CairoFont.WhiteSmallText(), "keywordField")
                 .AddSmallButton("Add", () => { AddKeyword(); return true; }, addBtnBounds)
                 .AddStaticText("Keyword", CairoFont.WhiteSmallText(), headerKw)
-                .AddStaticText("Remove", CairoFont.WhiteSmallText(), headerRemove)
+                .AddStaticText("Remove",  CairoFont.WhiteSmallText(), headerRemove)
                 .AddInset(listInset, 3)
                 .BeginClip(listInset);
 
-            int skip = currentPageKeywords * ItemsPerPage;
+            int skip  = currentPageKeywords * ItemsPerPage;
             int count = Math.Min(ItemsPerPage, Math.Max(0, workingCopy.FilteredKeywords.Count - skip));
             int y = 5;
 
@@ -310,11 +344,14 @@ namespace LootFilter
                     ElementBounds.Fixed(10, y, 280, 30));
 
                 string capturedKw = kw;
-                SingleComposer.AddSmallButton("X", () =>
+                var kwRemoveBounds = ElementBounds.Fixed(325, y, 40, 25);
+                SingleComposer.AddSmallButton("×", () =>
                 {
                     RemoveKeyword(capturedKw);
                     return true;
-                }, ElementBounds.Fixed(325, y, 40, 25));
+                }, kwRemoveBounds);
+                SingleComposer.AddHoverText("Remove this keyword",
+                    CairoFont.WhiteSmallText(), 160, kwRemoveBounds);
 
                 y += 33;
             }
@@ -325,18 +362,21 @@ namespace LootFilter
             var pageBounds = ElementBounds.Fixed(140, 528, 140, 25);
             var nextBounds = ElementBounds.Fixed(315, 525, 80, 30);
 
-            int totalPages = Math.Max(1, (workingCopy.FilteredKeywords.Count + ItemsPerPage - 1) / ItemsPerPage);
+            int totalPages = Math.Max(1,
+                (workingCopy.FilteredKeywords.Count + ItemsPerPage - 1) / ItemsPerPage);
             string pageLabel = $"Page {currentPageKeywords + 1} of {totalPages}";
 
             SingleComposer
                 .AddSmallButton("◄", () => { PageKeywords(-1); return true; }, prevBounds)
-                .AddStaticText(pageLabel, CairoFont.WhiteSmallText().WithOrientation(EnumTextOrientation.Center), pageBounds)
+                .AddStaticText(pageLabel,
+                    CairoFont.WhiteSmallText().WithOrientation(EnumTextOrientation.Center),
+                    pageBounds)
                 .AddSmallButton("►", () => { PageKeywords(1); return true; }, nextBounds);
 
             var kwField = SingleComposer.GetTextInput("keywordField");
             if (kwField != null)
             {
-                kwField.SetPlaceHolderText("Add a keyword...");
+                kwField.SetPlaceHolderText("Add a keyword…");
                 if (!string.IsNullOrEmpty(currentKeywordInput))
                     kwField.SetValue(currentKeywordInput);
             }
@@ -368,21 +408,233 @@ namespace LootFilter
 
         private void PageKeywords(int delta)
         {
-            int totalPages = Math.Max(1, (workingCopy.FilteredKeywords.Count + ItemsPerPage - 1) / ItemsPerPage);
+            int totalPages = Math.Max(1,
+                (workingCopy.FilteredKeywords.Count + ItemsPerPage - 1) / ItemsPerPage);
             int next = currentPageKeywords + delta;
             if (next < 0 || next >= totalPages) return;
             currentPageKeywords = next;
             ComposeDialog();
         }
 
-        // ── Settings tab ─────────────────────────────────────────────────
+        // ── Attributes tab (tab 2) ────────────────────────────────────────
+
+        private void ComposeAttributesTab()
+        {
+            // ── Add-rule inputs ──────────────────────────────────────────
+            // Row 1: [Field ────────] [Op dropdown] [Threshold ──]
+            // Row 2: [Label ────────────────────────] [Add]
+            var fieldBounds  = ElementBounds.Fixed(10,  40, 130, 30);
+            var opBounds     = ElementBounds.Fixed(145, 40, 100, 30);
+            var threshBounds = ElementBounds.Fixed(250, 40, 155, 30);
+
+            var labelBounds  = ElementBounds.Fixed(10,  78, 340, 30);
+            var addBtnBounds = ElementBounds.Fixed(355, 78,  50, 30);
+
+            // ── Rule list ────────────────────────────────────────────────
+            var listInset = ElementBounds.Fixed(10, 118, 395, 395).WithFixedPadding(1);
+
+            SingleComposer
+                .AddTextInput(fieldBounds,  OnAttrFieldChanged,  CairoFont.WhiteSmallText(), "attrField")
+                .AddHoverText("The attribute to check: durability, durability%, freshness, stacksize, or any raw attribute key",
+                    CairoFont.WhiteSmallText(), 260, fieldBounds)
+                .AddDropDown(OpDropdownValues, OpDropdownNames, attrOpIndex, OnAttrOpSelected, opBounds, "attrOp")
+                .AddHoverText("Comparison operator: how the item's value is compared to the threshold",
+                    CairoFont.WhiteSmallText(), 220, opBounds)
+                .AddTextInput(threshBounds, OnAttrThreshChanged, CairoFont.WhiteSmallText(), "attrThresh")
+                .AddHoverText("Numeric threshold to compare against (e.g. 0.25 for 25%)",
+                    CairoFont.WhiteSmallText(), 220, threshBounds)
+                .AddTextInput(labelBounds,  OnAttrLabelChanged,  CairoFont.WhiteSmallText(), "attrLabel")
+                .AddHoverText("Optional display label shown in the rule list (e.g. \"Nearly broken\")",
+                    CairoFont.WhiteSmallText(), 260, labelBounds)
+                .AddSmallButton("Add", () => { AddAttributeRule(); return true; }, addBtnBounds)
+                .AddInset(listInset, 3)
+                .BeginClip(listInset);
+
+            int skip  = currentPageAttrs * ItemsPerPage;
+            int count = Math.Min(ItemsPerPage,
+                Math.Max(0, workingCopy.FilteredAttributes.Count - skip));
+            int y = 5;
+
+            for (int i = 0; i < count; i++)
+            {
+                int idx = skip + i;
+                if (idx >= workingCopy.FilteredAttributes.Count) break;
+                AttributeRule rule = workingCopy.FilteredAttributes[idx];
+
+                string opStr = OpSymbol(rule.Op);
+                string rowText = string.IsNullOrEmpty(rule.Label)
+                    ? $"{rule.Field} {opStr} {rule.Threshold:G}"
+                    : $"{rule.Label}  ({rule.Field} {opStr} {rule.Threshold:G})";
+
+                SingleComposer.AddStaticText(
+                    rowText, CairoFont.WhiteSmallText(),
+                    ElementBounds.Fixed(10, y, 340, 30));
+
+                int capturedIdx = idx;
+                var attrRemoveBounds = ElementBounds.Fixed(360, y, 30, 25);
+                SingleComposer.AddSmallButton("×", () =>
+                {
+                    RemoveAttributeRule(capturedIdx);
+                    return true;
+                }, attrRemoveBounds);
+                SingleComposer.AddHoverText("Remove this rule",
+                    CairoFont.WhiteSmallText(), 140, attrRemoveBounds);
+
+                y += 33;
+            }
+
+            SingleComposer.EndClip();
+
+            // Pagination.
+            var prevBounds = ElementBounds.Fixed(10, 525, 80, 30);
+            var pageBounds = ElementBounds.Fixed(140, 528, 140, 25);
+            var nextBounds = ElementBounds.Fixed(315, 525, 80, 30);
+
+            int totalPages = Math.Max(1,
+                (workingCopy.FilteredAttributes.Count + ItemsPerPage - 1) / ItemsPerPage);
+            string pageLabel = $"Page {currentPageAttrs + 1} of {totalPages}";
+
+            SingleComposer
+                .AddSmallButton("◄", () => { PageAttrs(-1); return true; }, prevBounds)
+                .AddStaticText(pageLabel,
+                    CairoFont.WhiteSmallText().WithOrientation(EnumTextOrientation.Center),
+                    pageBounds)
+                .AddSmallButton("►", () => { PageAttrs(1); return true; }, nextBounds);
+
+            // Restore input values and placeholders after recompose.
+            RestoreAttrInputs();
+        }
+
+        private void RestoreAttrInputs()
+        {
+            SetInputSafe("attrField",  attrFieldInput);
+            SetInputSafe("attrThresh", attrThreshInput);
+            SetInputSafe("attrLabel",  attrLabelInput);
+
+            SingleComposer?.GetTextInput("attrField")
+                ?.SetPlaceHolderText("field");
+            SingleComposer?.GetTextInput("attrThresh")
+                ?.SetPlaceHolderText("value");
+            SingleComposer?.GetTextInput("attrLabel")
+                ?.SetPlaceHolderText("label (optional)");
+        }
+
+        private void OnAttrFieldChanged(string text)
+        {
+            if (isRecomposing) return;
+            attrFieldInput = text?.Trim() ?? "";
+        }
+
+        private void OnAttrOpSelected(string code, bool selected)
+        {
+            for (int i = 0; i < OpDropdownValues.Length; i++)
+            {
+                if (OpDropdownValues[i] == code) { attrOpIndex = i; return; }
+            }
+        }
+
+        private void OnAttrThreshChanged(string text)
+        {
+            if (isRecomposing) return;
+            attrThreshInput = text?.Trim() ?? "";
+        }
+
+        private void OnAttrLabelChanged(string text)
+        {
+            if (isRecomposing) return;
+            attrLabelInput = text?.Trim() ?? "";
+        }
+
+        private void AddAttributeRule()
+        {
+            if (string.IsNullOrWhiteSpace(attrFieldInput))
+            {
+                capi.ShowChatMessage("[LootFilter] Attribute field is required.");
+                return;
+            }
+
+            if (!double.TryParse(attrThreshInput, out double threshold))
+            {
+                capi.ShowChatMessage("[LootFilter] Threshold must be a number.");
+                return;
+            }
+
+            AttributeOperator op = OpValues[attrOpIndex];
+
+            var rule = new AttributeRule
+            {
+                Field     = attrFieldInput,
+                Op        = op,
+                Threshold = threshold,
+                Label     = attrLabelInput
+            };
+
+            workingCopy.FilteredAttributes.Add(rule);
+
+            // Clear inputs after successful add.
+            attrFieldInput  = "";
+            attrOpIndex     = 1;   // reset to ≤
+            attrThreshInput = "";
+            attrLabelInput  = "";
+
+            mod.SendConfigToServer(workingCopy);
+            ComposeDialog();
+        }
+
+        private void RemoveAttributeRule(int index)
+        {
+            if (index < 0 || index >= workingCopy.FilteredAttributes.Count) return;
+            workingCopy.FilteredAttributes.RemoveAt(index);
+            // Clamp page.
+            int totalPages = Math.Max(1,
+                (workingCopy.FilteredAttributes.Count + ItemsPerPage - 1) / ItemsPerPage);
+            if (currentPageAttrs >= totalPages) currentPageAttrs = totalPages - 1;
+
+            mod.SendConfigToServer(workingCopy);
+            ComposeDialog();
+        }
+
+        private void PageAttrs(int delta)
+        {
+            int totalPages = Math.Max(1,
+                (workingCopy.FilteredAttributes.Count + ItemsPerPage - 1) / ItemsPerPage);
+            int next = currentPageAttrs + delta;
+            if (next < 0 || next >= totalPages) return;
+            currentPageAttrs = next;
+            ComposeDialog();
+        }
+
+        private static string OpSymbol(AttributeOperator op) => op switch
+        {
+            AttributeOperator.LessThan           => "<",
+            AttributeOperator.LessThanOrEqual    => "≤",
+            AttributeOperator.Equal              => "=",
+            AttributeOperator.GreaterThanOrEqual => "≥",
+            AttributeOperator.GreaterThan        => ">",
+            _                                    => "≤"
+        };
+
+        private static AttributeOperator ParseOpSymbol(string s) => s?.Trim() switch
+        {
+            "<"  => AttributeOperator.LessThan,
+            "<=" => AttributeOperator.LessThanOrEqual,
+            "≤"  => AttributeOperator.LessThanOrEqual,
+            "="  => AttributeOperator.Equal,
+            "==" => AttributeOperator.Equal,
+            ">=" => AttributeOperator.GreaterThanOrEqual,
+            "≥"  => AttributeOperator.GreaterThanOrEqual,
+            ">"  => AttributeOperator.GreaterThan,
+            _    => AttributeOperator.LessThanOrEqual
+        };
+
+        // ── Settings tab (tab 3) ──────────────────────────────────────────
 
         private void ComposeSettingsTab()
         {
-            int y = 50;
+            int y      = 50;
             int labelX = 10;
             int switchX = 310;
-            int rowH = 45;
+            int rowH   = 45;
 
             SingleComposer
                 .AddStaticText("Trash-on-Sight", CairoFont.WhiteSmallText(),
@@ -426,11 +678,13 @@ namespace LootFilter
 
             y += rowH + 20;
 
-            SingleComposer.AddSmallButton("Export to Chat", () =>
-            {
-                ExportToChat();
-                return true;
-            }, ElementBounds.Fixed(10, y, 150, 30));
+            // Export / Import row.
+            var exportBounds = ElementBounds.Fixed(labelX,       y, 150, 30);
+            var importBounds = ElementBounds.Fixed(labelX + 165, y, 150, 30);
+
+            SingleComposer
+                .AddSmallButton("Export to Chat", () => { ExportToChat(); return true; }, exportBounds)
+                .AddSmallButton("Import…",        () => { OpenImportDialog(); return true; }, importBounds);
         }
 
         private void ApplySettingsSwitchStates()
@@ -453,6 +707,81 @@ namespace LootFilter
             }
         }
 
+        // ── Import ────────────────────────────────────────────────────────
+
+        private void OpenImportDialog()
+        {
+            importDialog ??= new FilterImportDialog(capi, OnImportConfirmed);
+            importDialog.TryOpen();
+        }
+
+        /// <summary>
+        /// Called back by <see cref="FilterImportDialog"/> after the player confirms.
+        /// When <paramref name="replaceAll"/> is <c>true</c>, the working copy is fully
+        /// replaced by the import.  When <c>false</c>, items, keywords, and attribute
+        /// rules are union-merged (no duplicates); bool toggles are preserved.
+        /// </summary>
+        private void OnImportConfirmed(LootFilterConfig imported, bool replaceAll)
+        {
+            if (replaceAll)
+            {
+                workingCopy = CloneConfig(imported);
+            }
+            else
+            {
+                // Union-merge codes.
+                for (int i = 0; i < imported.FilteredItemCodes.Count; i++)
+                {
+                    string code = imported.FilteredItemCodes[i];
+                    if (!string.IsNullOrEmpty(code) && !workingCopy.FilteredItemCodes.Contains(code))
+                        workingCopy.FilteredItemCodes.Add(code);
+                }
+
+                // Union-merge keywords.
+                for (int i = 0; i < imported.FilteredKeywords.Count; i++)
+                {
+                    string kw = imported.FilteredKeywords[i];
+                    if (!string.IsNullOrEmpty(kw) && !workingCopy.FilteredKeywords.Contains(kw))
+                        workingCopy.FilteredKeywords.Add(kw);
+                }
+
+                // Union-merge attribute rules (by field+op+threshold identity).
+                for (int i = 0; i < imported.FilteredAttributes.Count; i++)
+                {
+                    AttributeRule rule = imported.FilteredAttributes[i];
+                    if (rule == null || string.IsNullOrEmpty(rule.Field)) continue;
+
+                    bool exists = false;
+                    for (int j = 0; j < workingCopy.FilteredAttributes.Count; j++)
+                    {
+                        AttributeRule existing = workingCopy.FilteredAttributes[j];
+                        if (string.Equals(existing.Field, rule.Field, StringComparison.OrdinalIgnoreCase)
+                            && existing.Op == rule.Op
+                            && Math.Abs(existing.Threshold - rule.Threshold) < 1e-9)
+                        {
+                            exists = true;
+                            break;
+                        }
+                    }
+
+                    if (!exists)
+                        workingCopy.FilteredAttributes.Add(rule);
+                }
+                // Bool toggles intentionally preserved in merge mode.
+            }
+
+            mod.SendConfigToServer(workingCopy);
+
+            // Refresh whatever tab is currently active.
+            if (activeTabIndex == 0)
+                BuildFilteredItemsSync(searchQuery);
+
+            ComposeDialog();
+            ApplyPostComposeStates();
+
+            capi.ShowChatMessage("[LootFilter] Import applied.");
+        }
+
         // ─────────────────────────────────────────────────────────────────
         //  Tab switching
         // ─────────────────────────────────────────────────────────────────
@@ -461,8 +790,9 @@ namespace LootFilter
         {
             activeTabIndex = index;
 
-            if (index == 0) currentPageItems = 0;
+            if (index == 0) currentPageItems    = 0;
             if (index == 1) currentPageKeywords = 0;
+            if (index == 2) currentPageAttrs    = 0;
 
             ComposeDialog();
             ApplyPostComposeStates();
@@ -512,8 +842,7 @@ namespace LootFilter
 
         /// <summary>
         /// Runs the search on a background thread, then enqueues a
-        /// recompose on the main thread.  Used for debounced search-as-
-        /// you-type.
+        /// recompose on the main thread.  Used for debounced search-as-you-type.
         /// </summary>
         private void RefreshFilteredItemsAsync()
         {
@@ -599,7 +928,8 @@ namespace LootFilter
 
         private void ClampItemsPage()
         {
-            int totalPages = Math.Max(1, (cachedFilteredItems.Count + ItemsPerPage - 1) / ItemsPerPage);
+            int totalPages = Math.Max(1,
+                (cachedFilteredItems.Count + ItemsPerPage - 1) / ItemsPerPage);
             if (currentPageItems >= totalPages)
                 currentPageItems = totalPages - 1;
         }
@@ -630,8 +960,8 @@ namespace LootFilter
         {
             switch (activeTabIndex)
             {
-                case 0: ApplyItemSwitchStates(); break;
-                case 2: ApplySettingsSwitchStates(); break;
+                case 0: ApplyItemSwitchStates();    break;
+                case 3: ApplySettingsSwitchStates(); break;
             }
         }
 
@@ -664,10 +994,20 @@ namespace LootFilter
             }
         }
 
+        private void SetInputSafe(string key, string value)
+        {
+            var field = SingleComposer?.GetTextInput(key);
+            if (field == null || string.IsNullOrEmpty(value)) return;
+            isRecomposing = true;
+            field.SetValue(value);
+            isRecomposing = false;
+        }
+
         private static LootFilterConfig CloneConfig(LootFilterConfig src)
         {
             if (src == null) return new LootFilterConfig();
-            return new LootFilterConfig
+
+            var clone = new LootFilterConfig
             {
                 FilteredItemCodes   = new List<string>(src.FilteredItemCodes),
                 FilteredKeywords    = new List<string>(src.FilteredKeywords),
@@ -675,6 +1015,22 @@ namespace LootFilter
                 AllowlistMode       = src.AllowlistMode,
                 CrouchBypassEnabled = src.CrouchBypassEnabled
             };
+
+            // Deep-copy attribute rules.
+            for (int i = 0; i < src.FilteredAttributes.Count; i++)
+            {
+                var r = src.FilteredAttributes[i];
+                if (r == null) continue;
+                clone.FilteredAttributes.Add(new AttributeRule
+                {
+                    Field     = r.Field,
+                    Op        = r.Op,
+                    Threshold = r.Threshold,
+                    Label     = r.Label
+                });
+            }
+
+            return clone;
         }
     }
 }

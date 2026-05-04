@@ -25,30 +25,69 @@ namespace LootFilter
         [ProtoMember(5)]
         public bool CrouchBypassEnabled { get; set; } = true;
 
+        [ProtoMember(6)]
+        public List<AttributeRulePacket> FilteredAttributes { get; set; } = new List<AttributeRulePacket>();
+
         /// <summary>Snapshot the given config into a new packet.</summary>
         public static FilterUpdatePacket FromConfig(LootFilterConfig cfg)
         {
-            return new FilterUpdatePacket
+            var packet = new FilterUpdatePacket
             {
-                FilteredItemCodes = new List<string>(cfg.FilteredItemCodes),
-                FilteredKeywords  = new List<string>(cfg.FilteredKeywords),
-                AutoDropFiltered  = cfg.AutoDropFiltered,
-                AllowlistMode     = cfg.AllowlistMode,
+                FilteredItemCodes   = new List<string>(cfg.FilteredItemCodes),
+                FilteredKeywords    = new List<string>(cfg.FilteredKeywords),
+                AutoDropFiltered    = cfg.AutoDropFiltered,
+                AllowlistMode       = cfg.AllowlistMode,
                 CrouchBypassEnabled = cfg.CrouchBypassEnabled
             };
+
+            if (cfg.FilteredAttributes != null)
+            {
+                for (int i = 0; i < cfg.FilteredAttributes.Count; i++)
+                {
+                    var r = cfg.FilteredAttributes[i];
+                    if (r == null) continue;
+                    packet.FilteredAttributes.Add(new AttributeRulePacket
+                    {
+                        Field     = r.Field,
+                        Op        = (int)r.Op,
+                        Threshold = r.Threshold,
+                        Label     = r.Label ?? ""
+                    });
+                }
+            }
+
+            return packet;
         }
 
-        /// <summary>Apply packet contents onto an existing config instance.</summary>
+        /// <summary>Convert packet back to a fresh <see cref="LootFilterConfig"/>.</summary>
         public LootFilterConfig ToConfig()
         {
-            return new LootFilterConfig
+            var cfg = new LootFilterConfig
             {
-                FilteredItemCodes = new List<string>(FilteredItemCodes ?? new List<string>()),
-                FilteredKeywords  = new List<string>(FilteredKeywords ?? new List<string>()),
-                AutoDropFiltered  = AutoDropFiltered,
-                AllowlistMode     = AllowlistMode,
+                FilteredItemCodes   = new List<string>(FilteredItemCodes ?? new List<string>()),
+                FilteredKeywords    = new List<string>(FilteredKeywords ?? new List<string>()),
+                AutoDropFiltered    = AutoDropFiltered,
+                AllowlistMode       = AllowlistMode,
                 CrouchBypassEnabled = CrouchBypassEnabled
             };
+
+            if (FilteredAttributes != null)
+            {
+                for (int i = 0; i < FilteredAttributes.Count; i++)
+                {
+                    var r = FilteredAttributes[i];
+                    if (r == null) continue;
+                    cfg.FilteredAttributes.Add(new AttributeRule
+                    {
+                        Field     = r.Field ?? "",
+                        Op        = (AttributeOperator)r.Op,
+                        Threshold = r.Threshold,
+                        Label     = r.Label ?? ""
+                    });
+                }
+            }
+
+            return cfg;
         }
     }
 
@@ -74,30 +113,83 @@ namespace LootFilter
         [ProtoMember(5)]
         public bool CrouchBypassEnabled { get; set; } = true;
 
+        [ProtoMember(6)]
+        public List<AttributeRulePacket> FilteredAttributes { get; set; } = new List<AttributeRulePacket>();
+
         /// <summary>Snapshot the given config into a new packet.</summary>
         public static FilterSyncPacket FromConfig(LootFilterConfig cfg)
         {
-            return new FilterSyncPacket
+            var packet = new FilterSyncPacket
             {
-                FilteredItemCodes = new List<string>(cfg.FilteredItemCodes),
-                FilteredKeywords  = new List<string>(cfg.FilteredKeywords),
-                AutoDropFiltered  = cfg.AutoDropFiltered,
-                AllowlistMode     = cfg.AllowlistMode,
+                FilteredItemCodes   = new List<string>(cfg.FilteredItemCodes),
+                FilteredKeywords    = new List<string>(cfg.FilteredKeywords),
+                AutoDropFiltered    = cfg.AutoDropFiltered,
+                AllowlistMode       = cfg.AllowlistMode,
                 CrouchBypassEnabled = cfg.CrouchBypassEnabled
             };
+
+            if (cfg.FilteredAttributes != null)
+            {
+                for (int i = 0; i < cfg.FilteredAttributes.Count; i++)
+                {
+                    var r = cfg.FilteredAttributes[i];
+                    if (r == null) continue;
+                    packet.FilteredAttributes.Add(new AttributeRulePacket
+                    {
+                        Field     = r.Field,
+                        Op        = (int)r.Op,
+                        Threshold = r.Threshold,
+                        Label     = r.Label ?? ""
+                    });
+                }
+            }
+
+            return packet;
         }
 
-        /// <summary>Apply packet contents onto an existing config instance.</summary>
+        /// <summary>Convert packet back to a fresh <see cref="LootFilterConfig"/>.</summary>
         public LootFilterConfig ToConfig()
         {
-            return new LootFilterConfig
+            var cfg = new LootFilterConfig
             {
-                FilteredItemCodes = new List<string>(FilteredItemCodes ?? new List<string>()),
-                FilteredKeywords  = new List<string>(FilteredKeywords ?? new List<string>()),
-                AutoDropFiltered  = AutoDropFiltered,
-                AllowlistMode     = AllowlistMode,
+                FilteredItemCodes   = new List<string>(FilteredItemCodes ?? new List<string>()),
+                FilteredKeywords    = new List<string>(FilteredKeywords ?? new List<string>()),
+                AutoDropFiltered    = AutoDropFiltered,
+                AllowlistMode       = AllowlistMode,
                 CrouchBypassEnabled = CrouchBypassEnabled
             };
+
+            if (FilteredAttributes != null)
+            {
+                for (int i = 0; i < FilteredAttributes.Count; i++)
+                {
+                    var r = FilteredAttributes[i];
+                    if (r == null) continue;
+                    cfg.FilteredAttributes.Add(new AttributeRule
+                    {
+                        Field     = r.Field ?? "",
+                        Op        = (AttributeOperator)r.Op,
+                        Threshold = r.Threshold,
+                        Label     = r.Label ?? ""
+                    });
+                }
+            }
+
+            return cfg;
         }
+    }
+
+    /// <summary>
+    /// Protobuf-serializable representation of a single <see cref="AttributeRule"/>.
+    /// Using a flat DTO avoids protobuf-net's restrictions on polymorphic enums and
+    /// keeps the wire format simple.
+    /// </summary>
+    [ProtoContract]
+    public class AttributeRulePacket
+    {
+        [ProtoMember(1)] public string Field     { get; set; } = "";
+        [ProtoMember(2)] public int    Op        { get; set; }
+        [ProtoMember(3)] public double Threshold { get; set; }
+        [ProtoMember(4)] public string Label     { get; set; } = "";
     }
 }

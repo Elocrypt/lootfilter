@@ -61,7 +61,7 @@ namespace LootFilter
 
             // Find the IPlayer for this entity among online players.
             // No LINQ in the hot path — use a manual loop.
-            IPlayer player = null;
+            IPlayer? player = null;
             IPlayer[] allPlayers = sapi.World?.AllOnlinePlayers;
             if (allPlayers == null) return true;
 
@@ -88,12 +88,12 @@ namespace LootFilter
                     return true;
             }
 
-            // Evaluate filter.
-            var stack = ei.Itemstack;
+            // Evaluate filter — pass the full stack so attribute rules can inspect it.
+            ItemStack stack = ei.Itemstack;
             string code = stack?.Collectible?.Code?.ToString() ?? "";
             string name = stack?.GetName() ?? "";
 
-            if (LootFilterMatchLogic.MatchesFilter(cfg, code, name))
+            if (LootFilterMatchLogic.MatchesFilter(cfg, code, name, stack))
             {
                 __result = false;   // block pickup
                 return false;       // skip original method

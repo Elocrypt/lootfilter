@@ -27,21 +27,21 @@ namespace LootFilter
         // whichever side ran first.  We store each side separately.
 
         /// <summary>Server API reference.  Null on dedicated clients.</summary>
-        internal static ICoreServerAPI ServerApi { get; private set; }
+        internal static ICoreServerAPI? ServerApi { get; private set; }
 
         /// <summary>Client API reference.  Null on dedicated servers.</summary>
-        internal static ICoreClientAPI ClientApi { get; private set; }
+        internal static ICoreClientAPI? ClientApi { get; private set; }
 
         /// <summary>
         /// Convenience accessor used only for the Harmony patch's catch-all
         /// logger.  Prefer <see cref="ServerApi"/> or <see cref="ClientApi"/>
         /// everywhere else.
         /// </summary>
-        public static ICoreAPI ApiInstance => (ICoreAPI)ServerApi ?? ClientApi;
+        public static ICoreAPI? ApiInstance => (ICoreAPI?)ServerApi ?? ClientApi;
 
         // ── Server-only state ────────────────────────────────────────────
-        internal static PerPlayerConfigStore ServerStore { get; private set; }
-        private IServerNetworkChannel serverChannel;
+        internal static PerPlayerConfigStore? ServerStore { get; private set; }
+        private IServerNetworkChannel serverChannel = null!;
 
         // ── Client-only state ────────────────────────────────────────────
 
@@ -51,8 +51,8 @@ namespace LootFilter
         /// reads from this; it never writes to disk.
         /// </summary>
         internal LootFilterConfig ClientMirror { get; private set; } = new LootFilterConfig();
-        private IClientNetworkChannel clientChannel;
-        private FilterGuiDialog guiDialog;
+        private IClientNetworkChannel clientChannel = null!;
+        private FilterGuiDialog guiDialog = null!;
 
         // ─────────────────────────────────────────────────────────────────
         //  Lifecycle
@@ -63,10 +63,10 @@ namespace LootFilter
             base.Start(api);
 
             if (api.Side == EnumAppSide.Server)
-                StartServer(api as ICoreServerAPI);
+                StartServer(api as ICoreServerAPI ?? throw new InvalidOperationException());
 
             if (api.Side == EnumAppSide.Client)
-                StartClient(api as ICoreClientAPI);
+                StartClient(api as ICoreClientAPI ?? throw new InvalidOperationException());
 
             // Harmony patches apply on both sides; the patch itself gates
             // on ServerApi != null before doing real work.
@@ -128,22 +128,25 @@ namespace LootFilter
             string uid = fromPlayer.PlayerUID;
             LootFilterConfig cfg = packet.ToConfig();
 
-            ServerStore.Put(uid, cfg);
+            ServerStore!.Put(uid, cfg);
             LootFilterMatchLogic.InvalidateCache();
 
             // Confirm back to the sender so their client mirror is authoritative.
             serverChannel.SendPacket(FilterSyncPacket.FromConfig(cfg), fromPlayer);
 
             ServerApi?.Logger.Debug(
-                "[LootFilter] Saved config for {0} ({1} codes, {2} keywords).",
-                fromPlayer.PlayerName, cfg.FilteredItemCodes.Count, cfg.FilteredKeywords.Count);
+                "[LootFilter] Saved config for {0} ({1} codes, {2} keywords, {3} attr rules).",
+                fromPlayer.PlayerName,
+                cfg.FilteredItemCodes.Count,
+                cfg.FilteredKeywords.Count,
+                cfg.FilteredAttributes.Count);
         }
 
         private void OnPlayerJoin(IServerPlayer player)
         {
             if (player == null) return;
 
-            LootFilterConfig cfg = ServerStore.Get(player.PlayerUID);
+            LootFilterConfig cfg = ServerStore!.Get(player.PlayerUID);
             serverChannel.SendPacket(FilterSyncPacket.FromConfig(cfg), player);
         }
 
@@ -155,22 +158,22 @@ namespace LootFilter
         private void ServerAutoDropTick(float dt)
         {
             if (ServerApi == null) return;
-            IPlayer[] players = ServerApi.World?.AllOnlinePlayers;
+            IPlayer[]? players = ServerApi.World?.AllOnlinePlayers;
             if (players == null) return;
 
             for (int p = 0; p < players.Length; p++)
             {
-                IServerPlayer sp = players[p] as IServerPlayer;
+                IServerPlayer? sp = players[p] as IServerPlayer;
                 if (sp?.InventoryManager == null) continue;
 
                 // Skip creative-mode players.
                 if (sp.WorldData?.CurrentGameMode == EnumGameMode.Creative) continue;
 
-                LootFilterConfig cfg = ServerStore.Get(sp.PlayerUID);
+                LootFilterConfig cfg = ServerStore!.Get(sp.PlayerUID);
                 if (cfg == null || !cfg.AutoDropFiltered) continue;
 
                 // Crouch bypass: suppress auto-drop while sneaking.
-                EntityControls controls = sp.Entity?.Controls;
+                EntityControls? controls = sp.Entity?.Controls;
                 if (cfg.CrouchBypassEnabled && controls != null && controls.Sneak)
                     continue;
 
@@ -185,7 +188,7 @@ namespace LootFilter
         {
             for (int invIdx = 0; invIdx < InventoryIds.Length; invIdx++)
             {
-                IInventory inv = sp.InventoryManager.GetOwnInventory(InventoryIds[invIdx]);
+                IInventory? inv = sp.InventoryManager.GetOwnInventory(InventoryIds[invIdx]);
                 if (inv == null) continue;
 
                 dropSlotIndices.Clear();
@@ -199,13 +202,14 @@ namespace LootFilter
                     string code = stack?.Collectible?.Code?.ToString() ?? "";
                     string name = stack?.GetName() ?? "";
 
-                    if (LootFilterMatchLogic.MatchesFilter(cfg, code, name))
+                    // Pass the full stack so attribute rules (durability%, freshness, …) work.
+                    if (LootFilterMatchLogic.MatchesFilter(cfg, code, name, stack))
                         dropSlotIndices.Add(i);
                 }
 
                 if (dropSlotIndices.Count > 0 && inv is InventoryBase invBase)
                 {
-                    EntityPos pos = sp.Entity?.Pos;
+                    EntityPos? pos = sp.Entity?.Pos;
                     if (pos == null) continue;
 
                     // Drop 0.5 blocks in front of the player at foot level.
@@ -253,8 +257,10 @@ namespace LootFilter
             guiDialog?.OnMirrorUpdated();
 
             ClientApi?.Logger.Debug(
-                "[LootFilter] Received sync: {0} codes, {1} keywords.",
-                ClientMirror.FilteredItemCodes.Count, ClientMirror.FilteredKeywords.Count);
+                "[LootFilter] Received sync: {0} codes, {1} keywords, {2} attr rules.",
+                ClientMirror.FilteredItemCodes.Count,
+                ClientMirror.FilteredKeywords.Count,
+                ClientMirror.FilteredAttributes.Count);
         }
 
         /// <summary>
@@ -292,7 +298,7 @@ namespace LootFilter
         /// Returns null when called before the store exists or the server
         /// hasn't initialised.
         /// </summary>
-        internal static LootFilterConfig GetServerConfig(string uid)
+        internal static LootFilterConfig? GetServerConfig(string uid)
         {
             return ServerStore?.Get(uid);
         }

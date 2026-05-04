@@ -3,8 +3,8 @@
   "modid": "lootfilter",
   "name": "Loot Filter",
   "authors": [ "Elocrypt" ],
-  "description": "A powerful tool for players looking to customize their loot collection experience. Filter items by code, wildcard pattern, or display-name keyword. Supports allowlist mode, crouch bypass, and Trash-on-Sight auto-drop.",
-  "version": "1.1.0",
+  "description": "A powerful tool for players looking to customize their loot collection experience. Filter items by code, wildcard pattern, display-name keyword, or itemstack attribute (durability, freshness, stack size, and more). Supports allowlist mode, crouch bypass, Trash-on-Sight auto-drop, config export and import.",
+  "version": "1.2.0",
   "dependencies": {
     "game": "1.22.0",
     "survival": "1.22.0"

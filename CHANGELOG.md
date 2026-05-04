@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-03
+
+### Added
+- **Attribute filtering** — filter items based on live `ItemStack` properties.
+  Add rules in the new **Attributes** tab using four built-in synthetic fields
+  plus any raw attribute key:
+  - `durability` — remaining durability (absolute integer).
+  - `durability%` — remaining durability as a 0–1 fraction (e.g. `≤ 0.25` = below 25%).
+  - `freshness` — spoilage progress 0–1 (0 = fresh, 1 = fully spoiled).
+  - `stacksize` — current stack count.
+  - Any other key is resolved via `stack.Attributes.TryGetDecimal(key)`.
+  Rules use operators `<`, `≤`, `=`, `≥`, `>` and an optional display label.
+  An item is blocked when it satisfies **any** rule (OR semantics, consistent
+  with codes and keywords).  Attribute rules participate in Allowlist Mode
+  inversion the same as codes and keywords.
+- **Import from Chat** — "Import…" button in the Settings tab opens a modal
+  where the player can paste a JSON filter config (e.g. one copied from
+  Export to Chat). Two confirmation modes:
+  - **Merge** — union-merges codes, keywords, and attribute rules into the
+    current filter (duplicates skipped); bool toggles are preserved.
+  - **Replace All** — replaces the working config wholesale.
+  Invalid JSON shows an inline error without closing the modal.
+- `FilterImportDialog` — new standalone `GuiDialog` for the paste/parse UI.
+- `AttributeRule` data class and `AttributeOperator` enum (shared layer,
+  no API dependency).
+- `AttributeRulePacket` protobuf DTO carrying attribute rules over the wire.
+- `LootFilterMatchLogic.MatchesFilter(cfg, code, name, stack)` overload —
+  accepts a nullable `ItemStack` to enable attribute evaluation. The old two-
+  argument signature is preserved as a passthrough for the GUI item browser.
+
+### Changed
+- GUI now has **four tabs**: Items, Keywords, Attributes, Settings (Settings
+  moved from index 2 to index 3).
+- `LootFilterPatch` passes the full `ItemStack` to `MatchesFilter` so
+  attribute rules are evaluated at pickup time.
+- Auto-drop tick passes the full `ItemStack` to `MatchesFilter` so attribute
+  rules are also enforced by Trash-on-Sight.
+- `FilterUpdatePacket` and `FilterSyncPacket` carry `FilteredAttributes`
+  as `ProtoMember(6)`. Old packets (v1.1.0) remain wire-compatible — the
+  field defaults to an empty list when missing.
+- `LootFilterConfig` gains `FilteredAttributes` (JSON key `filteredAttributes`,
+  defaults to empty list). Old config files without the key deserialize cleanly.
+- `CloneConfig` in `FilterGuiDialog` deep-copies attribute rules.
+- Server-side log message now reports attribute rule count alongside codes and keywords.
+
 ## [1.1.0] - 2026-05-03
 
 ### Added
@@ -59,5 +104,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release with item code filtering and auto-drop.
 
+[1.2.0]: https://github.com/Elocrypt/LootFilter/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Elocrypt/LootFilter/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Elocrypt/LootFilter/releases/tag/v1.0.0

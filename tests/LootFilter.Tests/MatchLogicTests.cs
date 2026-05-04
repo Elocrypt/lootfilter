@@ -41,8 +41,8 @@ public class MatchLogicTests
         cfg.FilteredItemCodes.Add("game:stone-*");
 
         Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone-granite", "Granite"));
-        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone-basalt", "Basalt"));
-        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:ore-iron", "Iron Ore"));
+        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone-basalt",  "Basalt"));
+        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:ore-iron",     "Iron Ore"));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class MatchLogicTests
         cfg.FilteredItemCodes.Add("game:*-granite");
 
         Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone-granite", "Granite"));
-        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:rock-granite", "Granite"));
+        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:rock-granite",  "Granite"));
         Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone-basalt", "Basalt"));
     }
 
@@ -72,9 +72,9 @@ public class MatchLogicTests
         var cfg = new LootFilterConfig();
         cfg.FilteredItemCodes.Add("game:*stone*");
 
-        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone-granite", ""));
-        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:cobblestone-slab", ""));
-        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:ore-iron", ""));
+        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg,  "game:stone-granite",   ""));
+        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg,  "game:cobblestone-slab", ""));
+        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:ore-iron",          ""));
     }
 
     // ── Keyword match ────────────────────────────────────────────────
@@ -176,7 +176,7 @@ public class MatchLogicTests
 
         // Empty pattern doesn't crash; stone still matches.
         Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone", "Stone"));
-        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:ore", "Ore"));
+        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:ore",  "Ore"));
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class MatchLogicTests
         cfg.FilteredKeywords.Add("");
         cfg.FilteredKeywords.Add("stone");
 
-        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "x", "Smooth Stone"));
+        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg,  "x", "Smooth Stone"));
         Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "x", "Iron Ore"));
     }
 
@@ -227,5 +227,56 @@ public class MatchLogicTests
 
         // Code doesn't match, but keyword does.
         Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:rock", "Smooth Stone"));
+    }
+
+    // ── Attribute rules — no live stack (stack = null) ────────────────
+
+    [Fact]
+    public void AttributeRule_WithNullStack_NeverMatches()
+    {
+        var cfg = new LootFilterConfig();
+        cfg.FilteredAttributes.Add(new AttributeRule
+        {
+            Field     = "durability%",
+            Op        = AttributeOperator.LessThanOrEqual,
+            Threshold = 0.25
+        });
+
+        // stack = null (GUI browser path) → attribute rules skipped → no match.
+        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:sword", "Sword", stack: null));
+    }
+
+    // ── Attribute rules — allowlist interaction ───────────────────────
+
+    [Fact]
+    public void AttributeRule_AllowlistMode_InvertedCorrectly()
+    {
+        // In allowlist mode an attribute rule saying "match low-durability items"
+        // means those items ARE allowed; everything else is blocked.
+        var cfg = new LootFilterConfig { AllowlistMode = true };
+        cfg.FilteredAttributes.Add(new AttributeRule
+        {
+            Field     = "durability%",
+            Op        = AttributeOperator.LessThanOrEqual,
+            Threshold = 0.25
+        });
+
+        // Null stack → attribute rule not evaluated → core returns false →
+        // allowlist inversion → MatchesFilter returns true (blocked).
+        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone", "Stone", stack: null));
+    }
+
+    // ── Attribute rules — empty field ────────────────────────────────
+
+    [Fact]
+    public void AttributeRule_EmptyField_Skipped()
+    {
+        var cfg = new LootFilterConfig();
+        cfg.FilteredAttributes.Add(new AttributeRule { Field = "", Op = AttributeOperator.LessThan, Threshold = 10 });
+        cfg.FilteredItemCodes.Add("game:stone");
+
+        // Empty field rule is skipped; code match still works.
+        Assert.True(LootFilterMatchLogic.MatchesFilter(cfg, "game:stone", "Stone", stack: null));
+        Assert.False(LootFilterMatchLogic.MatchesFilter(cfg, "game:ore",   "Ore",   stack: null));
     }
 }
