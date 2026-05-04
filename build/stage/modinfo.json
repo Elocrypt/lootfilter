@@ -1,0 +1,14 @@
+{
+  "type": "code",
+  "modid": "lootfilter",
+  "name": "Loot Filter",
+  "authors": [ "Elocrypt" ],
+  "description": "A powerful tool for players looking to customize their loot collection experience. Filter items by code, wildcard pattern, or display-name keyword. Supports allowlist mode, crouch bypass, and Trash-on-Sight auto-drop.",
+  "version": "1.1.0",
+  "dependencies": {
+    "game": "1.22.0",
+    "survival": "1.22.0"
+  },
+  "website": "https://github.com/Elocrypt/LootFilter",
+  "side": "universal"
+}

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- No XML docs required for tests. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <!-- Auto-import xUnit in every .cs file in this project (works with ImplicitUsings=enable). -->
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LootFilter\LootFilter.csproj" />
+  </ItemGroup>
+
+  <!--
+    The main project references VS assemblies with Private=false, which stops their
+    DLLs from being copied to output but does not flow the references to referencing
+    projects. Tests that use VS types (e.g. ElementBounds in BoundsBuilderTests) must
+    declare their own reference. VintagestoryDir comes from Directory.Build.props.
+
+    Unlike the main project, Private=true here: the test assembly runs in a plain
+    .NET test host with no ambient VS runtime, so VintagestoryAPI.dll must be copied
+    to the test output directory to resolve at runtime. The main project correctly
+    keeps Private=false because VS loads mods inside its own process where the
+    assembly is already present.
+  -->
+  <ItemGroup>
+    <Reference Include="VintagestoryAPI">
+      <HintPath>$(VintagestoryDir)\VintagestoryAPI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
